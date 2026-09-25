@@ -1,0 +1,4 @@
+# 探す語そのものは公開しない。入れたら隠したいものを自分で公開することになる。
+tools/privacy-words.txt
+
+.DS_Store

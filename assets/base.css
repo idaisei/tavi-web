@@ -1,0 +1,125 @@
+/* 2つのアプリで共通の土台。iOS版と同じ濃紺×金にする。 */
+:root {
+  --navy: #131b2e;
+  --raise: #1b2540;
+  --inset: #243050;
+  --edge: #2a3757;
+  --gold: #c89b3c;
+  --gold-dim: #8e6e2a;
+  --cream: #f6f2e8;
+  --slate: #b8c2d4;
+  --slate-dim: #7d889e;
+  --good: #3e8e72;
+  --warn: #c8913c;
+  --bad: #c1453c;
+  --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN",
+          "Yu Gothic", "Noto Sans JP", sans-serif;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background: var(--navy);
+  color: var(--cream);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  /* iPhoneのノッチとホームバーを避ける */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; }
+
+h1, h2, h3 { line-height: 1.3; margin: 0; text-wrap: balance; }
+
+a { color: var(--gold); }
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+.card {
+  background: var(--raise);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.muted { color: var(--slate); }
+.dim { color: var(--slate-dim); }
+
+.eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--gold);
+}
+
+button, .btn {
+  font: inherit; font-weight: 600;
+  border: 1px solid var(--edge);
+  background: var(--inset);
+  color: var(--cream);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  min-height: 44px; /* 指で押せる最小 */
+}
+button:hover, .btn:hover { border-color: var(--gold-dim); }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+
+button.primary {
+  background: var(--gold); color: #1a1408; border-color: var(--gold);
+}
+button.ghost { background: transparent; }
+button.danger { color: #f0b5b0; border-color: #5a2f2c; }
+
+input, select, textarea {
+  font: inherit;
+  background: var(--inset);
+  color: var(--cream);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 10px 12px;
+  width: 100%;
+  min-height: 44px;
+}
+label { display: block; font-size: 13px; color: var(--slate); margin-bottom: 4px; }
+
+.row { display: flex; gap: 10px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.grid { display: grid; gap: 10px; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--edge); background: var(--inset);
+}
+.pill.good { color: var(--good); border-color: #23503f; }
+.pill.warn { color: var(--warn); border-color: #5a4520; }
+.pill.bad  { color: var(--bad);  border-color: #5a2f2c; }
+
+.empty {
+  border: 1px dashed var(--edge); border-radius: var(--radius);
+  padding: 20px; text-align: center; color: var(--slate-dim);
+}
+
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--navy) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--edge);
+}
+.topbar .wrap { display: flex; align-items: center; gap: 12px; height: 56px; }
+.topbar a { color: var(--slate); text-decoration: none; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

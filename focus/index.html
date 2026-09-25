@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Focus Desk｜静かな学習タイマー</title>
+<meta name="description" content="音を鳴らさない学習タイマー。机に置きっぱなしにする前提で作りました。">
+<meta name="theme-color" content="#131b2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="../assets/base.css">
+<style>
+  .deck { padding-block: 18px 40px; display: grid; gap: 16px; }
+
+  /* 勉強中の画面。時間を「円」ではなく「横に流れる浅い弧」で出す。
+     時計は回るが、勉強時間は流れるものにしたかった。 */
+  .desk { text-align: center; padding-block: 26px; }
+  .desk .elapsed { font-size: clamp(44px, 14vw, 68px); font-weight: 700; letter-spacing: .01em; }
+  .desk .now { font-size: 15px; color: var(--slate); }
+  .arc { width: 100%; height: 46px; display: block; margin-block: 12px; }
+
+  .subject-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+    padding: 12px 14px; border: 1px solid var(--edge); border-radius: var(--radius);
+    background: var(--raise); text-align: left; width: 100%;
+  }
+  .subject-row:hover { border-color: var(--gold-dim); }
+  .subject-row .nm { font-weight: 700; }
+  .subject-row .why { font-size: 12.5px; color: var(--slate); }
+
+  .bars { display: grid; grid-auto-flow: column; gap: 6px; align-items: end; height: 92px; }
+  .bars .bar { background: var(--gold-dim); border-radius: 4px 4px 0 0; min-height: 3px; }
+  .bars .bar.today { background: var(--gold); }
+  .barlabels { display: grid; grid-auto-flow: column; gap: 6px; font-size: 10.5px; color: var(--slate-dim); text-align: center; }
+
+  dialog {
+    border: 1px solid var(--edge); border-radius: var(--radius);
+    background: var(--raise); color: var(--cream); max-width: 460px; width: calc(100% - 32px);
+    padding: 18px;
+  }
+  dialog::backdrop { background: rgba(6,9,18,.7); }
+
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { flex: 1; min-height: 40px; }
+  .tabs button[aria-selected="true"] { background: var(--gold); color: #1a1408; border-color: var(--gold); }
+
+  .quiet { font-size: 12.5px; color: var(--slate-dim); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a href="../">← ホーム</a>
+    <strong style="margin-left:auto">Focus Desk</strong>
+  </div>
+</header>
+
+<main class="wrap deck">
+
+  <!-- ホーム -->
+  <section id="home">
+    <div class="card">
+      <p class="eyebrow">今日の勉強時間</p>
+      <p class="num" id="todayTotal" style="font-size:38px;font-weight:700;margin:4px 0 0">0分</p>
+      <p class="quiet" id="levelLine">レベル 1</p>
+    </div>
+
+    <h2 style="font-size:17px;margin-top:20px">すぐ始める</h2>
+    <p class="quiet" style="margin:2px 0 10px">期限が近いだけでなく、落としたときの重さも見て並べています。</p>
+    <div class="grid" id="subjectList"></div>
+
+    <div class="row" style="margin-top:14px">
+      <button id="addSubjectBtn">科目・タスクを足す</button>
+      <button class="ghost" id="goHistory">記録を見る</button>
+    </div>
+  </section>
+
+  <!-- 勉強中 -->
+  <section id="desk" class="hidden">
+    <div class="card desk">
+      <p class="eyebrow" id="deskSubject">—</p>
+      <p class="elapsed num" id="deskElapsed">0分</p>
+      <svg class="arc" viewBox="0 0 320 46" aria-hidden="true">
+        <path d="M8 34 C 90 34, 110 14, 160 14 S 230 34, 312 34" fill="none"
+              stroke="#243050" stroke-width="5" stroke-linecap="round"/>
+        <path id="arcFill" d="M8 34 C 90 34, 110 14, 160 14 S 230 34, 312 34" fill="none"
+              stroke="#c89b3c" stroke-width="5" stroke-linecap="round"
+              pathLength="100" stroke-dasharray="0 100"/>
+      </svg>
+      <p class="now num" id="deskClock">--:--</p>
+      <p class="quiet" id="deskEndsAt"></p>
+    </div>
+
+    <div class="card" id="breakCard">
+      <p class="eyebrow">休憩</p>
+      <p class="quiet" style="margin:4px 0 10px">1タップで始まります。音は鳴りません。</p>
+      <div class="row wrap" id="breakButtons">
+        <button data-min="5">5分</button>
+        <button data-min="10">10分</button>
+        <button data-min="15">15分</button>
+        <button data-min="20">20分</button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="onBreakCard">
+      <p class="eyebrow">休憩中</p>
+      <p class="num" id="breakLeft" style="font-size:28px;font-weight:700;margin:4px 0">--</p>
+      <p class="quiet" id="breakNudge"></p>
+      <button class="primary" id="endBreakBtn" style="margin-top:8px">勉強に戻る</button>
+    </div>
+
+    <button class="danger" id="endBtn">終わる</button>
+    <p class="quiet">アプリを閉じても時間は狂いません。開始と終了の時刻だけ持っていて、出しているのはその引き算です。</p>
+  </section>
+
+  <!-- 終わったとき -->
+  <section id="done" class="hidden">
+    <div class="card" style="text-align:center">
+      <p class="eyebrow">おつかれさまでした</p>
+      <p class="num" id="doneTime" style="font-size:40px;font-weight:700;margin:6px 0">0分</p>
+      <p class="quiet" id="doneDetail"></p>
+      <button class="primary" id="doneBack" style="margin-top:12px">戻る</button>
+    </div>
+  </section>
+
+  <!-- 記録 -->
+  <section id="history" class="hidden">
+    <div class="card">
+      <p class="eyebrow">7日間</p>
+      <div class="bars" id="bars" style="margin-top:10px"></div>
+      <div class="barlabels" id="barLabels" style="margin-top:6px"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <p class="eyebrow">積み上げ</p>
+      <p class="quiet" id="streakLine" style="margin:6px 0 0"></p>
+      <div id="subjectTotals" class="grid" style="margin-top:10px"></div>
+    </div>
+    <button class="ghost" id="backHome" style="margin-top:14px">戻る</button>
+  </section>
+
+  <p class="quiet" style="text-align:center;margin-top:26px">
+    記録はこのブラウザの中だけに保存されます。どこにも送っていません。
+    <br><button class="ghost" id="resetBtn" style="margin-top:8px;min-height:36px;font-size:12px">保存したものを全部消す</button>
+  </p>
+</main>
+
+<!-- 科目を足す -->
+<dialog id="subjectDialog">
+  <form method="dialog" id="subjectForm" class="grid">
+    <h2 style="font-size:17px">科目・タスクを足す</h2>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-kind="study" aria-selected="true">勉強</button>
+      <button type="button" role="tab" data-kind="task" aria-selected="false">タスク</button>
+    </div>
+    <div>
+      <label for="sjName">名前</label>
+      <input id="sjName" required placeholder="放射線科学 / レポート提出">
+    </div>
+    <div>
+      <label for="sjDate"><span class="deadlineWord">試験</span>の日（無くても大丈夫）</label>
+      <input id="sjDate" type="date">
+    </div>
+    <div>
+      <label for="sjSeverity">落としたときの重さ</label>
+      <select id="sjSeverity">
+        <option value="1">軽い</option>
+        <option value="2" selected>普通</option>
+        <option value="3">重い</option>
+        <option value="4">落とせない</option>
+      </select>
+    </div>
+    <div>
+      <label for="sjManual">自分で決める優先度</label>
+      <select id="sjManual">
+        <option value="0" selected>自動（期限と重さで決める）</option>
+        <option value="1">低い</option>
+        <option value="3">高い</option>
+        <option value="4">最優先</option>
+      </select>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button type="button" class="ghost" id="sjCancel">やめる</button>
+      <button type="submit" class="primary">足す</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
