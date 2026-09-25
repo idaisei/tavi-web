@@ -5,188 +5,129 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Focus Desk｜静かな学習タイマー</title>
 <meta name="description" content="音を鳴らさない学習タイマー。机に置きっぱなしにする前提で作りました。">
-<meta name="theme-color" content="#131b2e">
+<meta name="theme-color" content="#0b0c0e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="../assets/base.css">
 <style>
-  .deck { padding-block: 18px 40px; display: grid; gap: 16px; }
-
-  /* 勉強中の画面。時間を「円」ではなく「横に流れる浅い弧」で出す。
-     時計は回るが、勉強時間は流れるものにしたかった。 */
-  .desk { text-align: center; padding-block: 26px; }
-  .desk .elapsed { font-size: clamp(44px, 14vw, 68px); font-weight: 700; letter-spacing: .01em; }
-  .desk .now { font-size: 15px; color: var(--slate); }
-  .arc { width: 100%; height: 46px; display: block; margin-block: 12px; }
-
-  .subject-row {
-    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
-    padding: 12px 14px; border: 1px solid var(--edge); border-radius: var(--radius);
-    background: var(--raise); text-align: left; width: 100%;
+  :root {
+    --desk-bg: #07080a; --surface: #141619; --surface-up: #1b1d21;
+    --hairline: rgba(255,255,255,.07); --text: #edf0f2;
+    --secondary: #969ca6; --tertiary: #60656f; --focus: #71a9f0;
+    --focus-soft: rgba(113,169,240,.14); --rest: #e5bd73;
+    --rest-soft: rgba(229,189,115,.14); --urgent: #f39665;
   }
-  .subject-row:hover { border-color: var(--gold-dim); }
-  .subject-row .nm { font-weight: 700; }
-  .subject-row .why { font-size: 12.5px; color: var(--slate); }
-
-  .bars { display: grid; grid-auto-flow: column; gap: 6px; align-items: end; height: 92px; }
-  .bars .bar { background: var(--gold-dim); border-radius: 4px 4px 0 0; min-height: 3px; }
-  .bars .bar.today { background: var(--gold); }
-  .barlabels { display: grid; grid-auto-flow: column; gap: 6px; font-size: 10.5px; color: var(--slate-dim); text-align: center; }
-
-  dialog {
-    border: 1px solid var(--edge); border-radius: var(--radius);
-    background: var(--raise); color: var(--cream); max-width: 460px; width: calc(100% - 32px);
-    padding: 18px;
-  }
-  dialog::backdrop { background: rgba(6,9,18,.7); }
-
-  .tabs { display: flex; gap: 6px; }
-  .tabs button { flex: 1; min-height: 40px; }
-  .tabs button[aria-selected="true"] { background: var(--gold); color: #1a1408; border-color: var(--gold); }
-
-  .quiet { font-size: 12.5px; color: var(--slate-dim); }
+  html { color-scheme: dark; }
+  body { background: #0b0c0e; color: var(--text); min-height: 100dvh; }
+  body.desk-mode { background: var(--desk-bg); }
+  .wrap { max-width: 680px; }
+  .deck { padding-block: 18px 42px; display: grid; gap: 16px; }
   .hidden { display: none !important; }
+  .quiet { font-size: 12.5px; color: var(--tertiary); }
+  .section-label { margin: 0; font-size: 13px; font-weight: 650; color: var(--tertiary); }
+  .ios-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: 20px; padding: 20px; }
+  .topbar { background: rgba(11,12,14,.86); border-color: var(--hairline); }
+  .topbar .wrap { height: 52px; }
+  .topbar a { color: var(--secondary); }
+  .top-title { margin: auto; transform: translateX(-28px); font-size: 15px; }
+  button { border-color: var(--hairline); background: var(--surface-up); border-radius: 12px; }
+  button.primary { background: var(--focus); border-color: var(--focus); color: #09111a; }
+  button.ghost { color: var(--secondary); }
+  .today-card { display: flex; align-items: center; gap: 18px; }
+  .today-card .copy { flex: 1; }
+  .today-time { font-size: clamp(38px, 11vw, 48px); font-weight: 300; line-height: 1; margin: 8px 0; }
+  .progress-ring { width: 70px; height: 70px; flex: 0 0 auto; transform: rotate(-90deg); }
+  .progress-ring circle { fill: none; stroke-width: 7; }
+  .progress-ring .track { stroke: rgba(255,255,255,.08); }
+  .progress-ring .fill { stroke: var(--focus); stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
+  .start-main { width: 100%; min-height: 66px; padding: 18px 22px; display: flex; align-items: center; gap: 12px; text-align: left; color: white; border: 0; background: linear-gradient(135deg, var(--focus), #527fb9); border-radius: 20px; font-size: 17px; }
+  .start-main .suggestion { margin-left: auto; max-width: 45%; color: rgba(255,255,255,.72); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .subject-section { display: grid; gap: 9px; }
+  .subject-head { display: flex; align-items: center; justify-content: space-between; }
+  .link-button { border: 0; padding: 4px; min-height: 32px; background: transparent; color: var(--tertiary); font-size: 13px; }
+  .subject-row { display: grid; grid-template-columns: 11px 1fr auto; gap: 12px; align-items: center; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: 14px; background: var(--surface); text-align: left; width: 100%; }
+  .subject-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--focus); }
+  .subject-row .nm { font-weight: 600; }
+  .subject-row .why { font-size: 12px; color: var(--tertiary); }
+  .subject-row .today { font-size: 13px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+  .game-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .game-tile { text-align: center; padding: 14px 8px; background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; }
+  .game-tile strong { display: block; font-size: 17px; font-weight: 500; }
+  .game-tile span { color: var(--tertiary); font-size: 11px; }
+  .footer-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #desk { min-height: calc(100dvh - 90px); }
+  .desk-shell { min-height: calc(100dvh - 120px); display: flex; flex-direction: column; gap: 18px; }
+  .desk-header { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+  .desk-header .subject { font-weight: 600; }
+  .break-badge { color: var(--rest); background: var(--rest-soft); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+  .desk-spacer { flex: 1; min-height: 12px; }
+  .time-stack { text-align: center; }
+  .timer-label { font-size: 12px; letter-spacing: .14em; color: var(--tertiary); }
+  .desk .elapsed { font-size: clamp(58px, 18vw, 82px); font-weight: 200; line-height: 1; letter-spacing: -.035em; margin: 12px 0 20px; }
+  .arc { width: 100%; height: 48px; display: block; margin-block: 8px 18px; }
+  .desk-now { font-size: 27px; font-weight: 300; color: var(--secondary); }
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); padding: 12px 0; }
+  .metric { text-align: center; }
+  .metric + .metric { border-left: 1px solid var(--hairline); }
+  .metric span { display: block; font-size: 11px; color: var(--tertiary); }
+  .metric strong { display: block; margin-top: 3px; color: var(--secondary); font-size: 15px; font-weight: 550; }
+  .planned-line { text-align: center; color: var(--secondary); font-size: 13px; }
+  .break-panel { padding: 14px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); }
+  .break-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+  .break-grid button { min-width: 0; padding-inline: 6px; touch-action: manipulation; }
+  .break-grid button:active { transform: scale(.96); background: var(--rest-soft); border-color: var(--rest); }
+  .on-break { text-align: center; background: var(--rest-soft); border-color: rgba(229,189,115,.24); }
+  .on-break .break-time { color: var(--rest); font-size: 34px; font-weight: 300; margin: 4px 0; }
+  .desk-controls { display: grid; gap: 10px; }
+  .dimmed { opacity: .34; transition: opacity 1.2s ease; }
+  .bars { display: grid; grid-auto-flow: column; gap: 6px; align-items: end; height: 92px; }
+  .bars .bar { background: rgba(113,169,240,.35); border-radius: 4px 4px 0 0; min-height: 3px; }
+  .bars .bar.today { background: var(--focus); }
+  .barlabels { display: grid; grid-auto-flow: column; gap: 6px; font-size: 10.5px; color: var(--tertiary); text-align: center; }
+  dialog { border: 1px solid var(--hairline); border-radius: 20px; background: var(--surface); color: var(--text); max-width: 520px; width: calc(100% - 28px); padding: 0; }
+  dialog::backdrop { background: rgba(0,0,0,.72); backdrop-filter: blur(2px); }
+  .dialog-body { padding: 20px; display: grid; gap: 15px; max-height: 86dvh; overflow: auto; }
+  .dialog-title { display: flex; justify-content: space-between; align-items: center; }
+  .dialog-title h2 { font-size: 17px; }
+  .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; background: #0d0f12; border-radius: 10px; }
+  .segmented button { border: 0; min-height: 36px; padding: 7px; background: transparent; color: var(--secondary); }
+  .segmented button[aria-selected="true"] { background: var(--surface-up); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+  .toggle-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .toggle-line input { width: 22px; min-height: 22px; accent-color: var(--focus); }
+  .color-options { display: flex; gap: 10px; flex-wrap: wrap; }
+  .color-options input { position: absolute; opacity: 0; pointer-events: none; }
+  .color-options label { width: 30px; height: 30px; border-radius: 50%; background: var(--c); border: 3px solid transparent; margin: 0; cursor: pointer; }
+  .color-options input:checked + label { border-color: var(--text); }
+  .empty { border-color: var(--hairline); color: var(--tertiary); }
+  input, select { background: var(--surface-up); border-color: var(--hairline); color: var(--text); }
+  @media (min-width: 700px) { .deck { padding-top: 26px; } .desk-shell { min-height: 720px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="wrap">
-    <a href="../">← ホーム</a>
-    <strong style="margin-left:auto">Focus Desk</strong>
-  </div>
-</header>
-
+<header class="topbar" id="topbar"><div class="wrap"><a href="../">← ホーム</a><strong class="top-title">Focus Desk</strong></div></header>
 <main class="wrap deck">
-
-  <!-- ホーム -->
   <section id="home">
-    <div class="card">
-      <p class="eyebrow">今日の勉強時間</p>
-      <p class="num" id="todayTotal" style="font-size:38px;font-weight:700;margin:4px 0 0">0分</p>
-      <p class="quiet" id="levelLine">レベル 1</p>
-    </div>
-
-    <h2 style="font-size:17px;margin-top:20px">すぐ始める</h2>
-    <p class="quiet" style="margin:2px 0 10px">期限が近いだけでなく、落としたときの重さも見て並べています。</p>
-    <div class="grid" id="subjectList"></div>
-
-    <div class="row" style="margin-top:14px">
-      <button id="addSubjectBtn">科目・タスクを足す</button>
-      <button class="ghost" id="goHistory">記録を見る</button>
-    </div>
+    <div class="ios-card today-card"><div class="copy"><p class="section-label" id="todayLabel">今日の勉強時間</p><p class="today-time num" id="todayTotal">0分</p><p class="quiet" id="goalLine">科目の目標を設定できます</p></div><svg class="progress-ring" viewBox="0 0 72 72" aria-label="今日の目標達成率"><circle class="track" cx="36" cy="36" r="29"></circle><circle class="fill" id="goalRing" cx="36" cy="36" r="29" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"></circle></svg></div>
+    <button class="start-main" id="openStartBtn"><span aria-hidden="true">▶</span><strong id="startLabel">勉強を始める</strong><span class="suggestion" id="startSuggestion"></span></button>
+    <div id="emptyState" class="ios-card hidden"><strong>まず科目かタスクを登録してください</strong><p class="quiet">科目ごとに時間を記録します。期限と重大度を入れると、優先度の高いものから並びます。</p><button class="primary" id="emptyAddBtn">追加する</button></div>
+    <div class="subject-section" id="prioritySection"><div class="subject-head"><p class="section-label" id="priorityLabel">優先度の高い科目</p><button class="link-button" id="manageSubjectsBtn">管理</button></div><div class="grid" id="subjectList"></div></div>
+    <div class="game-strip"><div class="game-tile"><strong id="levelValue">1</strong><span>LEVEL</span></div><div class="game-tile"><strong id="xpValue">0</strong><span>XP</span></div><div class="game-tile"><strong id="streakValue">0日</strong><span>連続</span></div></div>
+    <div class="footer-actions"><button class="ghost" id="addSubjectBtn">科目管理</button><button class="ghost" id="goHistory">記録</button><button class="ghost" id="settingsBtn">設定</button></div>
   </section>
-
-  <!-- 勉強中 -->
-  <section id="desk" class="hidden">
-    <div class="card desk">
-      <p class="eyebrow" id="deskSubject">—</p>
-      <p class="elapsed num" id="deskElapsed">0分</p>
-      <svg class="arc" viewBox="0 0 320 46" aria-hidden="true">
-        <path d="M8 34 C 90 34, 110 14, 160 14 S 230 34, 312 34" fill="none"
-              stroke="#243050" stroke-width="5" stroke-linecap="round"/>
-        <path id="arcFill" d="M8 34 C 90 34, 110 14, 160 14 S 230 34, 312 34" fill="none"
-              stroke="#c89b3c" stroke-width="5" stroke-linecap="round"
-              pathLength="100" stroke-dasharray="0 100"/>
-      </svg>
-      <p class="now num" id="deskClock">--:--</p>
-      <p class="quiet" id="deskEndsAt"></p>
-    </div>
-
-    <div class="card" id="breakCard">
-      <p class="eyebrow">休憩</p>
-      <p class="quiet" style="margin:4px 0 10px">1タップで始まります。音は鳴りません。</p>
-      <div class="row wrap" id="breakButtons">
-        <button data-min="5">5分</button>
-        <button data-min="10">10分</button>
-        <button data-min="15">15分</button>
-        <button data-min="20">20分</button>
-      </div>
-    </div>
-
-    <div class="card hidden" id="onBreakCard">
-      <p class="eyebrow">休憩中</p>
-      <p class="num" id="breakLeft" style="font-size:28px;font-weight:700;margin:4px 0">--</p>
-      <p class="quiet" id="breakNudge"></p>
-      <button class="primary" id="endBreakBtn" style="margin-top:8px">勉強に戻る</button>
-    </div>
-
-    <button class="danger" id="endBtn">終わる</button>
-    <p class="quiet">アプリを閉じても時間は狂いません。開始と終了の時刻だけ持っていて、出しているのはその引き算です。</p>
-  </section>
-
-  <!-- 終わったとき -->
-  <section id="done" class="hidden">
-    <div class="card" style="text-align:center">
-      <p class="eyebrow">おつかれさまでした</p>
-      <p class="num" id="doneTime" style="font-size:40px;font-weight:700;margin:6px 0">0分</p>
-      <p class="quiet" id="doneDetail"></p>
-      <button class="primary" id="doneBack" style="margin-top:12px">戻る</button>
-    </div>
-  </section>
-
-  <!-- 記録 -->
-  <section id="history" class="hidden">
-    <div class="card">
-      <p class="eyebrow">7日間</p>
-      <div class="bars" id="bars" style="margin-top:10px"></div>
-      <div class="barlabels" id="barLabels" style="margin-top:6px"></div>
-    </div>
-    <div class="card" style="margin-top:14px">
-      <p class="eyebrow">積み上げ</p>
-      <p class="quiet" id="streakLine" style="margin:6px 0 0"></p>
-      <div id="subjectTotals" class="grid" style="margin-top:10px"></div>
-    </div>
-    <button class="ghost" id="backHome" style="margin-top:14px">戻る</button>
-  </section>
-
-  <p class="quiet" style="text-align:center;margin-top:26px">
-    記録はこのブラウザの中だけに保存されます。どこにも送っていません。
-    <br><button class="ghost" id="resetBtn" style="margin-top:8px;min-height:36px;font-size:12px">保存したものを全部消す</button>
-  </p>
+  <section id="desk" class="hidden desk"><div class="desk-shell" id="deskShell">
+    <div class="desk-header"><span class="subject-dot" id="deskDot"></span><span class="subject" id="deskSubject">—</span><span class="break-badge hidden" id="breakBadge">休憩中</span><span style="margin-left:auto" class="quiet num" id="deskEndsAt"></span></div>
+    <div class="desk-spacer"></div><div class="time-stack"><div class="timer-label" id="timerLabel">今日の経過時間</div><div class="elapsed num" id="deskElapsed">00:00:00</div><svg class="arc" viewBox="0 0 320 48" aria-hidden="true"><path d="M8 42 Q160 -28 312 42" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="4" stroke-linecap="round"/><path id="arcFill" d="M8 42 Q160 -28 312 42" fill="none" stroke="#71a9f0" stroke-width="4" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/></svg><div class="desk-now num" id="deskClock">--:--</div></div><div class="desk-spacer"></div>
+    <div class="metrics" id="metrics"><div class="metric"><span>今回</span><strong id="sessionMetric">0分</strong></div><div class="metric"><span>休憩</span><strong id="breakMetric">0分</strong></div><div class="metric"><span>目標</span><strong id="goalMetric">—</strong></div></div><div class="planned-line hidden" id="plannedNotice"></div>
+    <div class="break-panel" id="breakCard"><p class="section-label">休憩する</p><p class="quiet" style="margin:3px 0 0">自動では始まりません。時間を選ぶと、すぐ休憩に切り替わります。</p><div class="break-grid" id="breakButtons"><button type="button" data-min="5">5分</button><button type="button" data-min="10">10分</button><button type="button" data-min="15">15分</button><button type="button" data-min="20">20分</button></div></div>
+    <div class="break-panel on-break hidden" id="onBreakCard"><p class="section-label">休憩</p><p class="break-time num" id="breakLeft">--:--</p><p class="quiet" id="breakNudge"></p><button type="button" class="primary" id="endBreakBtn">勉強に戻る</button></div><div class="desk-controls"><button type="button" class="danger" id="endBtn">終了して記録する</button></div>
+  </div></section>
+  <section id="done" class="hidden"><div class="ios-card" style="text-align:center"><p class="section-label">おつかれさま</p><p class="num" id="doneTime" style="font-size:46px;font-weight:300;margin:8px 0">0分</p><p id="doneSubject" style="color:var(--secondary)"></p><div id="doneDetails" class="grid" style="margin-top:18px"></div><p class="quiet" id="doneXp"></p><button class="primary" id="doneBack" style="margin-top:12px;width:100%">閉じる</button></div></section>
+  <section id="history" class="hidden"><div class="ios-card"><p class="section-label">7日間</p><div class="bars" id="bars"></div><div class="barlabels" id="barLabels"></div></div><div class="ios-card"><p class="section-label">積み上げ</p><p class="quiet" id="streakLine"></p><div id="subjectTotals" class="grid"></div></div><button class="ghost" id="backHome">戻る</button></section>
 </main>
-
-<!-- 科目を足す -->
-<dialog id="subjectDialog">
-  <form method="dialog" id="subjectForm" class="grid">
-    <h2 style="font-size:17px">科目・タスクを足す</h2>
-    <div class="tabs" role="tablist">
-      <button type="button" role="tab" data-kind="study" aria-selected="true">勉強</button>
-      <button type="button" role="tab" data-kind="task" aria-selected="false">タスク</button>
-    </div>
-    <div>
-      <label for="sjName">名前</label>
-      <input id="sjName" required placeholder="放射線科学 / レポート提出">
-    </div>
-    <div>
-      <label for="sjDate"><span class="deadlineWord">試験</span>の日（無くても大丈夫）</label>
-      <input id="sjDate" type="date">
-    </div>
-    <div>
-      <label for="sjSeverity">落としたときの重さ</label>
-      <select id="sjSeverity">
-        <option value="1">軽い</option>
-        <option value="2" selected>普通</option>
-        <option value="3">重い</option>
-        <option value="4">落とせない</option>
-      </select>
-    </div>
-    <div>
-      <label for="sjManual">自分で決める優先度</label>
-      <select id="sjManual">
-        <option value="0" selected>自動（期限と重さで決める）</option>
-        <option value="1">低い</option>
-        <option value="3">高い</option>
-        <option value="4">最優先</option>
-      </select>
-    </div>
-    <div class="row" style="justify-content:flex-end">
-      <button type="button" class="ghost" id="sjCancel">やめる</button>
-      <button type="submit" class="primary">足す</button>
-    </div>
-  </form>
-</dialog>
-
+<dialog id="startDialog"><div class="dialog-body"><div class="dialog-title"><button class="link-button" data-close="startDialog">閉じる</button><h2>何をする？</h2><span></span></div><div class="segmented" id="timerMode"><button type="button" data-mode="stopwatch" aria-selected="true">ストップウォッチ</button><button type="button" data-mode="countdown" aria-selected="false">カウントダウン</button></div><label id="countdownRow" class="hidden">目標<select id="countdownMinutes"><option>15</option><option selected>25</option><option>30</option><option>45</option><option>50</option><option>60</option><option>90</option></select></label><div class="ios-card" style="padding:14px"><label class="toggle-line"><span>終わりの時刻を決める</span><input type="checkbox" id="usePlannedEnd"></label><label id="plannedEndRow" class="hidden" style="margin-top:10px">終わり<input type="time" id="plannedEnd"></label><p class="quiet">その時刻になっても勝手に終了しません。</p></div><div class="grid" id="pickerList"></div></div></dialog>
+<dialog id="subjectDialog"><form id="subjectForm" class="dialog-body"><div class="dialog-title"><button type="button" class="link-button" id="sjCancel">閉じる</button><h2>科目とタスク</h2><button type="submit" class="link-button" style="color:var(--focus)">保存</button></div><input type="hidden" id="sjId"><label id="sjExistingRow">編集する科目<select id="sjExisting"><option value="">＋ 新しく追加</option></select></label><div class="segmented" id="kindTabs"><button type="button" data-kind="study" aria-selected="true">勉強</button><button type="button" data-kind="task" aria-selected="false">タスク</button></div><label>名前<input id="sjName" required placeholder="科目名 / タスク名"></label><div><span class="quiet">色</span><div class="color-options" id="colorOptions"></div></div><label>1日の目標<select id="sjGoal"><option value="0">なし</option><option value="15">15分</option><option value="30">30分</option><option value="45">45分</option><option value="60">1時間</option><option value="90">1時間30分</option><option value="120">2時間</option></select></label><label><span class="deadlineWord">試験</span>の日（無くても大丈夫）<input id="sjDate" type="date"></label><label>落としたときの重さ<select id="sjSeverity"><option value="1">軽い</option><option value="2" selected>普通</option><option value="3">重い</option><option value="4">落とせない</option></select></label><label>自分で決める優先度<select id="sjManual"><option value="0">自動</option><option value="1">低い</option><option value="3">高い</option><option value="4">最優先</option></select></label></form></dialog>
+<dialog id="settingsDialog"><form method="dialog" class="dialog-body"><div class="dialog-title"><button class="link-button" value="cancel">閉じる</button><h2>設定</h2><span></span></div><label>休憩を提案するまで<select id="breakSuggestAfter"><option>20</option><option>30</option><option>45</option><option selected>60</option><option>90</option><option>120</option></select></label><label>Desk Modeの減光<select id="dimAfter"><option value="0">減光しない</option><option value="30">30秒</option><option value="60" selected>1分</option><option value="120">2分</option><option value="300">5分</option></select></label><label class="toggle-line"><span>Desk Mode中に画面を消さない</span><input type="checkbox" id="keepAwake" checked></label><p class="quiet">音は鳴らしません。設定と記録はこのブラウザの中だけに保存されます。</p><button type="button" class="danger" id="resetBtn">保存したものを全部消す</button></form></dialog>
 <script type="module" src="./app.js"></script>
 </body>
 </html>
