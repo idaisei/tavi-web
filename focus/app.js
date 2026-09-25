@@ -177,8 +177,13 @@ function startSession(subjectId, mode = 'stopwatch', countdownMinutes = 25, plan
 }
 
 function endSession() {
+  if (!state.active) return;
+  $('endConfirmDialog').showModal();
+}
+
+function finalizeSession() {
   const s = state.active;
-  if (!s || !confirm('このセッションを終了して記録しますか？')) return;
+  if (!s) return;
   const last = s.breaks.at(-1);
   if (last && !last.end) last.end = Date.now();
   s.end = Date.now();
@@ -195,10 +200,10 @@ function endSession() {
 
 function summaryRow(label, value) { return `<div class="spread"><span class="quiet">${label}</span><strong class="num">${value}</strong></div>`; }
 
-function startBreak(minutes) {
+function startBreak(minutes = null) {
   const s = state.active;
   if (!s || isOnBreak(s)) return;
-  s.breaks.push({ start: Date.now(), end: null, plannedMinutes: minutes });
+  s.breaks.push({ start: Date.now(), end: null, plannedMinutes: minutes || null });
   lastInteraction = Date.now(); save(); renderDesk();
 }
 
@@ -248,8 +253,16 @@ function renderDesk() {
   const ratio = countdown === null ? (subjectToday % 3600) / 3600 : Math.min(1, studied / (Number(s.countdownMinutes || 25) * 60));
   $('arcFill').setAttribute('stroke-dasharray', `${Math.max(0, ratio * 100).toFixed(2)} 100`);
   $('arcFill').setAttribute('stroke', onBreak ? '#e5bd73' : '#71a9f0');
-  $('breakCard').classList.toggle('hidden', onBreak);
+  $('breakCard').classList.remove('hidden');
   $('onBreakCard').classList.toggle('hidden', !onBreak);
+  $('breakPanelTitle').textContent = onBreak ? '休憩中' : '休憩する';
+  $('breakPanelText').textContent = onBreak
+    ? '同じボタンをもう一度押すと、すぐ勉強に戻ります。'
+    : '下のボタンを押すと、時間を決めずにすぐ休憩へ切り替わります。';
+  $('breakToggleBtn').textContent = onBreak ? '勉強に戻る' : '休憩する';
+  $('breakToggleBtn').style.background = onBreak ? 'var(--rest)' : '';
+  $('breakToggleBtn').style.borderColor = onBreak ? 'var(--rest)' : '';
+  $('timedBreakArea').classList.toggle('hidden', onBreak);
 
   $('deskEndsAt').textContent = s.plannedEndAt ? `🔔 ${clock(s.plannedEndAt)}` : '';
   if (s.plannedEndAt) {
@@ -259,7 +272,11 @@ function renderDesk() {
 
   if (onBreak) {
     const left = breakRemaining(s, now);
-    if (left >= 0) { $('breakLeft').textContent = shortCountdown(left); $('breakNudge').textContent = '時間になったら静かにお知らせします。'; }
+    if (left === null) {
+      const currentBreak = s.breaks.at(-1);
+      $('breakLeft').textContent = durationClock((now - currentBreak.start) / 1000);
+      $('breakNudge').textContent = '時間を決めない休憩です。上のボタンで勉強に戻れます。';
+    } else if (left >= 0) { $('breakLeft').textContent = shortCountdown(left); $('breakNudge').textContent = '時間になったら静かにお知らせします。'; }
     else { const over = Math.floor(-left / 60); $('breakLeft').textContent = `+${over}分`; $('breakNudge').textContent = over >= 5 ? 'そろそろ勉強に戻りませんか。' : '休憩の予定を過ぎました。'; }
   }
 
@@ -363,8 +380,12 @@ $('subjectForm').addEventListener('submit', (event) => {
 document.querySelectorAll('#breakButtons [data-min]').forEach((button) => {
   button.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); startBreak(Number(button.dataset.min)); });
 });
-$('endBreakBtn').addEventListener('click', endBreak);
+$('breakToggleBtn').addEventListener('click', () => {
+  if (state.active && isOnBreak(state.active)) endBreak(); else startBreak();
+});
 $('endBtn').addEventListener('click', endSession);
+$('confirmEndBtn').addEventListener('click', () => { $('endConfirmDialog').close(); finalizeSession(); });
+$('cancelEndBtn').addEventListener('click', () => $('endConfirmDialog').close());
 $('doneBack').addEventListener('click', () => show('home'));
 $('goHistory').addEventListener('click', () => show('history'));
 $('backHome').addEventListener('click', () => show('home'));
