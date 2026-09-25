@@ -1,0 +1,18 @@
+{
+  "name": "Focus Desk",
+  "short_name": "Focus Desk",
+  "description": "音を鳴らさない、机に置くための学習タイマー。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0c0e",
+  "theme_color": "#0b0c0e",
+  "icons": [
+    {
+      "src": "./app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

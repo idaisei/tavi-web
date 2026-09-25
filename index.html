@@ -19,7 +19,7 @@
   .app p { color: var(--slate); font-size: 14px; margin: 0; }
   .app .go { color: var(--gold); font-weight: 700; font-size: 13px; margin-top: 12px; display: block; }
 
-  .mark { width: 54px; height: 54px; margin-bottom: 12px; display: block; }
+  .mark { width: 64px; height: 64px; margin-bottom: 12px; display: block; border-radius: 15px; object-fit: cover; }
 
   .facts { display: grid; gap: 1px; background: var(--edge); border: 1px solid var(--edge);
            border-radius: var(--radius); overflow: hidden; margin-top: 30px; }
@@ -45,12 +45,7 @@
 
   <div class="apps">
     <a class="app card" href="./focus/">
-      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
-        <rect x="4" y="4" width="40" height="40" rx="11" fill="none" stroke="#c89b3c" stroke-width="2.5"/>
-        <path d="M11 30 C 18 30, 20 19, 24 19 S 30 30, 37 30" fill="none"
-              stroke="#c89b3c" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="24" cy="19" r="2.6" fill="#c89b3c"/>
-      </svg>
+      <img class="mark" src="./focus/app-icon.png" alt="Focus Deskのアプリアイコン">
       <h2>Focus Desk</h2>
       <p>
         音を鳴らさない学習タイマー。カフェの机に置きっぱなしにする前提で作りました。
