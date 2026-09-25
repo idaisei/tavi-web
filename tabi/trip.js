@@ -4,8 +4,10 @@
 // 天気は Open-Meteo（登録もキーも要らない）、場所は OpenStreetMap の Nominatim。
 // どちらも CORS が開いているのでブラウザから直接呼べる。
 
-const KEY = 'tavimaps.v1';
-const EMPTY = { trips: [], activeId: null };
+const KEY = new URLSearchParams(location.search).get('private') === '1'
+  ? 'tavimaps.private.v1'
+  : 'tavimaps.v1';
+const EMPTY = { trips: [], activeId: null, deleted: [] };
 
 function read() {
   try {

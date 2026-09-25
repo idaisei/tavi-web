@@ -3,6 +3,7 @@ import {
   store, uid, studySeconds, breakSeconds, isOnBreak, breakRemaining,
   totals, todaySeconds, streak, xpFromSeconds, levelProgress, hhmm, clock,
 } from './store.js';
+import { isSyncConfigured, syncRequest } from '../assets/sync.js';
 
 const $ = (id) => document.getElementById(id);
 const screens = { home: $('home'), desk: $('desk'), done: $('done'), history: $('history') };
@@ -17,6 +18,7 @@ let tick = null;
 let wakeLock = null;
 let lastInteraction = Date.now();
 let newKind = 'study';
+let syncRunning = false;
 
 function normalize(raw) {
   const next = raw ?? {};
@@ -191,11 +193,61 @@ function finalizeSession() {
   const gained = xpFromSeconds(studied);
   state.sessions.push(s); state.xp += gained; state.active = null; save();
   const subject = state.subjects.find((x) => x.id === s.subjectId);
+  void pushFocusRecord(s, subject);
   $('doneTime').textContent = hhmm(studied);
   $('doneSubject').textContent = subject?.name ?? '科目なし';
   $('doneDetails').innerHTML = summaryRow('今日の合計', hhmm(todaySeconds(state.sessions))) + summaryRow('この科目の今日', hhmm(subjectTodaySeconds(s.subjectId, false))) + summaryRow('休憩', hhmm(breakSeconds(s)));
   $('doneXp').textContent = gained > 0 ? `+${gained} XP${streak(state.sessions) ? ` ・ ${streak(state.sessions)}日連続` : ''}` : '';
   show('done');
+}
+
+function setSyncStatus(message) {
+  $('syncStatus').textContent = message;
+}
+
+async function pushFocusRecord(session, subject) {
+  if (!isSyncConfigured()) return;
+  try {
+    await syncRequest('/focus/sessions', { method: 'POST', body: { session, subject } });
+    setSyncStatus('Notionに記録しました');
+  } catch (error) {
+    setSyncStatus(`${error.message}。端末には保存済みです`);
+  }
+}
+
+async function syncFocus({ quiet = false } = {}) {
+  if (syncRunning || !isSyncConfigured()) return;
+  syncRunning = true;
+  if (!quiet) setSyncStatus('同期しています…');
+  try {
+    const remote = await syncRequest('/focus/sessions');
+    const records = Array.isArray(remote.sessions) ? remote.sessions : [];
+    const remoteIds = new Set(records.map((item) => item?.session?.id).filter(Boolean));
+
+    for (const record of records) {
+      const session = record?.session;
+      if (!session?.id || state.sessions.some((item) => item.id === session.id)) continue;
+      state.sessions.push(session);
+      const subject = record.subject;
+      if (subject?.id && !state.subjects.some((item) => item.id === subject.id)) state.subjects.push(subject);
+    }
+
+    for (const session of state.sessions) {
+      if (remoteIds.has(session.id)) continue;
+      const subject = state.subjects.find((item) => item.id === session.subjectId);
+      await syncRequest('/focus/sessions', { method: 'POST', body: { session, subject } });
+    }
+
+    state.sessions.sort((a, b) => a.start - b.start);
+    state.xp = state.sessions.reduce((sum, session) => sum + xpFromSeconds(studySeconds(session)), 0);
+    save();
+    if (!state.active) renderHome();
+    setSyncStatus(`同期済み（${new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}）`);
+  } catch (error) {
+    setSyncStatus(error.message);
+  } finally {
+    syncRunning = false;
+  }
 }
 
 function summaryRow(label, value) { return `<div class="spread"><span class="quiet">${label}</span><strong class="num">${value}</strong></div>`; }
@@ -351,6 +403,9 @@ function openSettings() {
   $('breakSuggestAfter').value = String(state.settings.breakSuggestAfter);
   $('dimAfter').value = String(state.settings.dimAfter);
   $('keepAwake').checked = state.settings.keepAwake;
+  const canSync = isSyncConfigured();
+  $('syncNowBtn').disabled = !canSync;
+  setSyncStatus(canSync ? '本人版：Notion同期を利用できます' : '公開体験版：この端末だけに保存します');
   $('settingsDialog').showModal();
 }
 
@@ -390,6 +445,7 @@ $('doneBack').addEventListener('click', () => show('home'));
 $('goHistory').addEventListener('click', () => show('history'));
 $('backHome').addEventListener('click', () => show('home'));
 $('settingsBtn').addEventListener('click', openSettings);
+$('syncNowBtn').addEventListener('click', () => syncFocus());
 ['breakSuggestAfter', 'dimAfter', 'keepAwake'].forEach((id) => $(id).addEventListener('change', saveSettingsFromForm));
 $('resetBtn').addEventListener('click', () => {
   if (!confirm('保存した科目と記録を全部消します。元に戻せません。')) return;
@@ -401,3 +457,4 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && st
 
 initColorOptions();
 show(state.active ? 'desk' : 'home');
+void syncFocus({ quiet: true });

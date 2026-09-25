@@ -6,7 +6,9 @@
 //
 // 置き場所はブラウザの localStorage。サーバーには何も送らない。
 
-const KEY = 'focusdesk.v1';
+const KEY = new URLSearchParams(location.search).get('private') === '1'
+  ? 'focusdesk.private.v1'
+  : 'focusdesk.v1';
 
 const EMPTY = { subjects: [], sessions: [], active: null, xp: 0 };
 

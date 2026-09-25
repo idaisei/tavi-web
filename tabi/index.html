@@ -66,6 +66,7 @@
   <div class="wrap">
     <a href="../">← ホーム</a>
     <strong style="margin-left:auto" id="tripTitle">TAVI MAPS</strong>
+    <button class="ghost" id="syncBtn" style="min-height:34px;padding:5px 10px;font-size:12px">同期</button>
     <button class="ghost" id="tripsBtn" style="min-height:34px;padding:5px 10px;font-size:12px">旅行</button>
   </div>
 </header>
@@ -108,8 +109,8 @@
   <p class="quiet" id="autoResult"></p>
 
   <p class="quiet" style="text-align:center;margin-top:20px">
-    旅程はこのブラウザの中だけに保存されます。<br>
-    場所と天気の取得以外、どこにも送っていません。
+    公開体験版は、このブラウザの中だけに保存されます。<br>
+    Googleログイン必須の本人版では、Notion経由で端末間に共有できます。
   </p>
 </main>
 
@@ -128,6 +129,16 @@
   </form>
   <button class="ghost" id="loadSample" style="margin-top:10px;width:100%">サンプルの旅程を読み込む</button>
   <button class="ghost" id="tripsClose" style="margin-top:10px;width:100%">閉じる</button>
+</dialog>
+
+<dialog id="syncDialog">
+  <h2 style="font-size:17px">Notion同期</h2>
+  <p class="quiet">本人版では、MacBook・スマートフォンで同じ旅程を利用できます。公開体験版のデータは、この端末だけに保存します。</p>
+  <div class="grid">
+    <button class="primary" id="syncNowBtn">今すぐ同期</button>
+    <p class="quiet" id="syncStatus" role="status">公開体験版：この端末だけに保存します</p>
+    <button class="ghost" id="syncClose">閉じる</button>
+  </div>
 </dialog>
 
 <!-- 場所を決める -->

@@ -2,13 +2,88 @@ import {
   store, uid, makeTrip, iso, searchPlaces, fetchWeather, weatherFace, weatherWord,
   departureAdvice, hhmmOf, humanLeft, distanceKm,
 } from './trip.js';
+import { isSyncConfigured, syncRequest } from '../assets/sync.js';
 
 const $ = (id) => document.getElementById(id);
-let state = store.get();
+let state = normalizeState(store.get());
 let map = null, marker = null, picking = null;
+let syncTimer = null;
+let syncRunning = false;
 
 const activeTrip = () => state.trips.find((t) => t.id === state.activeId) ?? state.trips[0] ?? null;
-const save = () => store.set(state);
+const save = () => {
+  const trip = activeTrip();
+  if (trip) trip.updatedAt = Date.now();
+  store.set(state);
+  if (trip) scheduleTripUpload(trip);
+};
+
+function normalizeState(raw) {
+  const next = raw ?? {};
+  next.trips ??= [];
+  next.deleted ??= [];
+  next.activeId ??= null;
+  next.trips.forEach((trip) => { trip.updatedAt ||= 0; });
+  return next;
+}
+
+function scheduleTripUpload(trip) {
+  if (!isSyncConfigured()) return;
+  clearTimeout(syncTimer);
+  const snapshot = structuredClone(trip);
+  syncTimer = setTimeout(() => { void pushTrip(snapshot); }, 1200);
+}
+
+async function pushTrip(trip) {
+  try {
+    await syncRequest(`/tavi/trips/${encodeURIComponent(trip.id)}`, { method: 'PUT', body: trip });
+    setSyncStatus('Notionに保存しました');
+  } catch (error) {
+    setSyncStatus(`${error.message}。端末には保存済みです`);
+  }
+}
+
+function setSyncStatus(message) { $('syncStatus').textContent = message; }
+
+async function syncTrips({ quiet = false } = {}) {
+  if (syncRunning || !isSyncConfigured()) return;
+  syncRunning = true;
+  if (!quiet) setSyncStatus('同期しています…');
+  try {
+    const remote = await syncRequest('/tavi/trips');
+    const remoteItems = Array.isArray(remote.items) ? remote.items : [];
+    const localItems = [...state.trips, ...state.deleted.map((item) => ({ ...item, deleted: true }))];
+    const localById = new Map(localItems.map((item) => [item.id, item]));
+    const remoteById = new Map(remoteItems.filter((item) => item?.id).map((item) => [item.id, item]));
+    const ids = new Set([...localById.keys(), ...remoteById.keys()]);
+    const mergedTrips = [];
+    const mergedDeleted = [];
+
+    for (const id of ids) {
+      const local = localById.get(id);
+      const other = remoteById.get(id);
+      const winner = !other || Number(local?.updatedAt || 0) > Number(other.updatedAt || 0) ? local : other;
+      if (!winner) continue;
+      if (winner.deleted) mergedDeleted.push({ id, updatedAt: winner.updatedAt });
+      else mergedTrips.push(winner);
+      if (local && (!other || Number(local.updatedAt || 0) > Number(other.updatedAt || 0))) {
+        const method = local.deleted ? 'DELETE' : 'PUT';
+        await syncRequest(`/tavi/trips/${encodeURIComponent(id)}`, { method, body: local });
+      }
+    }
+
+    state.trips = mergedTrips;
+    state.deleted = mergedDeleted;
+    if (!state.trips.some((trip) => trip.id === state.activeId)) state.activeId = state.trips[0]?.id ?? null;
+    store.set(state);
+    renderAll();
+    setSyncStatus(`同期済み（${new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}）`);
+  } catch (error) {
+    setSyncStatus(error.message);
+  } finally {
+    syncRunning = false;
+  }
+}
 
 // MARK: - サンプル（公開用。実在の宿名・決済額は入れない）
 
@@ -408,9 +483,18 @@ function renderTripList() {
     });
     row.children[1].addEventListener('click', () => {
       if (!confirm(`「${t.title}」を消しますか？元に戻せません。`)) return;
+      const tombstone = { id: t.id, updatedAt: Date.now() };
+      state.deleted = state.deleted.filter((item) => item.id !== t.id);
+      state.deleted.push(tombstone);
       state.trips = state.trips.filter((x) => x.id !== t.id);
       if (state.activeId === t.id) state.activeId = state.trips[0]?.id ?? null;
-      save(); renderTripList(); renderAll();
+      store.set(state);
+      if (isSyncConfigured()) {
+        void syncRequest(`/tavi/trips/${encodeURIComponent(t.id)}`, { method: 'DELETE', body: tombstone })
+          .then(() => setSyncStatus('削除をNotionに反映しました'))
+          .catch((error) => setSyncStatus(`${error.message}。次回の同期で再試行します`));
+      }
+      renderTripList(); renderAll();
     });
     box.appendChild(row);
   }
@@ -420,12 +504,23 @@ $('locBtn').addEventListener('click', askLocation);
 $('tripsBtn').addEventListener('click', () => { renderTripList(); tripsDialog.showModal(); });
 $('tripsClose').addEventListener('click', () => tripsDialog.close());
 
+const syncDialog = $('syncDialog');
+$('syncBtn').addEventListener('click', () => {
+  const canSync = isSyncConfigured();
+  $('syncNowBtn').disabled = !canSync;
+  setSyncStatus(canSync ? '本人版：Notion同期を利用できます' : '公開体験版：この端末だけに保存します');
+  syncDialog.showModal();
+});
+$('syncClose').addEventListener('click', () => syncDialog.close());
+$('syncNowBtn').addEventListener('click', () => syncTrips());
+
 $('newTripForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const trip = makeTrip({
     title: $('ntTitle').value, start: $('ntStart').value, end: $('ntEnd').value,
   });
   if (!trip) { alert('題名と日程を入れてください（60日以内）。'); return; }
+  trip.updatedAt = Date.now();
   state.trips.push(trip);
   state.activeId = trip.id;
   save(); tripsDialog.close(); renderAll();
@@ -433,6 +528,7 @@ $('newTripForm').addEventListener('submit', (e) => {
 
 $('loadSample').addEventListener('click', () => {
   const trip = sampleTrip();
+  trip.updatedAt = Date.now();
   state.trips.push(trip);
   state.activeId = trip.id;
   save(); tripsDialog.close(); renderAll();
@@ -441,7 +537,7 @@ $('loadSample').addEventListener('click', () => {
 // MARK: - 起動
 
 function renderAll() {
-  state = store.get();
+  state = normalizeState(store.get());
   renderVerdict();
   renderDays();
   renderWeather();
@@ -451,4 +547,5 @@ const today = iso(new Date());
 $('ntStart').value = today;
 $('ntEnd').value = today;
 renderAll();
+void syncTrips({ quiet: true });
 setInterval(renderVerdict, 30000);
