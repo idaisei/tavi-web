@@ -129,11 +129,15 @@ export function streak(sessions, now = Date.now()) {
 // MARK: - XP とレベル（iOS版と同じ：1分 = 1XP、レベルは二次で伸びる）
 
 export const xpFromSeconds = (seconds) => Math.floor(seconds / 60);
-export const xpRequired = (level) => 60 * level * level;
+export const xpRequired = (level) => {
+  if (level <= 1) return 0;
+  const l = level - 1;
+  return 25 * l * (l + 1);
+};
 
 export function levelProgress(xp) {
   let level = 1;
-  while (xp >= xpRequired(level + 1)) level++;
+  while (xpRequired(level + 1) <= xp) level++;
   const base = xpRequired(level);
   const next = xpRequired(level + 1);
   return { level, xp, into: xp - base, span: next - base, ratio: (xp - base) / (next - base) };

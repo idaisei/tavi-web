@@ -1,8 +1,8 @@
-import { breakdown, reason, daysUntil, SEVERITY } from './priority.js';
+import { breakdown, reason, daysUntil } from './priority.js?v=20261008-1';
 import {
   store, uid, studySeconds, breakSeconds, isOnBreak, breakRemaining,
   totals, todaySeconds, streak, xpFromSeconds, levelProgress, hhmm, clock,
-} from './store.js';
+} from './store.js?v=20261008-1';
 import { isSyncConfigured, syncRequest } from '../assets/sync.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,6 +11,7 @@ const COLORS = ['7FB2FF', '8FD6C0', 'E3B36F', 'E48D8D', 'B49BE0', '7FC8E8', 'C9C
 const DEFAULT_SETTINGS = {
   timerMode: 'stopwatch', countdownMinutes: 25, usePlannedEnd: false,
   plannedEnd: '18:00', breakSuggestAfter: 60, dimAfter: 60, keepAwake: true,
+  notificationsEnabled: false,
 };
 
 let state = normalize(store.get());
@@ -24,6 +25,7 @@ function normalize(raw) {
   const next = raw ?? {};
   next.subjects = (next.subjects ?? []).map((s, index) => ({
     colorHex: COLORS[index % COLORS.length], dailyGoalMinutes: 0, kind: 'study', ...s,
+    exams: Array.isArray(s.exams) ? s.exams : (s.examDate ? [{ id: uid(), title: '', date: s.examDate, severity: Number(s.severity || 2) }] : []),
   }));
   next.sessions ??= [];
   next.active ??= null;
@@ -62,12 +64,19 @@ async function releaseWakeLock() {
 
 function deadlineWord(subject) { return subject.kind === 'task' ? '締め切り' : '試験'; }
 
+function relevantExam(subject, now = new Date()) {
+  const exams = (subject.exams ?? []).filter((exam) => exam.date).sort((a, b) => a.date.localeCompare(b.date));
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return exams.find((exam) => exam.date >= today) ?? exams.at(-1) ?? null;
+}
+
 function rankedSubjects(now = new Date()) {
   return state.subjects
     .map((subject) => {
-      const d = daysUntil(subject.examDate, now);
-      const b = breakdown({ daysUntil: d, severity: subject.examDate ? subject.severity : null, manual: subject.manual });
-      return { subject, b };
+      const exam = relevantExam(subject, now);
+      const d = daysUntil(exam?.date, now);
+      const b = breakdown({ daysUntil: d, severity: exam?.severity ?? null, manual: subject.manual });
+      return { subject, exam, b };
     })
     .sort((a, b) => b.b.score - a.b.score);
 }
@@ -85,15 +94,15 @@ function subjectTodaySeconds(subjectId, includeActive = true) {
 function hasTasks() { return state.subjects.some((s) => s.kind === 'task'); }
 
 function renderSubjectButton(container, item, { immediate = true } = {}) {
-  const { subject, b } = item;
+  const { subject, exam, b } = item;
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'subject-row';
   btn.innerHTML = '<span class="subject-dot"></span><span><span class="nm"></span><br><span class="why"></span></span><span class="today num"></span>';
   btn.querySelector('.subject-dot').style.background = `#${subject.colorHex}`;
   btn.querySelector('.nm').textContent = subject.name;
-  const sev = subject.examDate && subject.severity ? SEVERITY[subject.severity].short : '';
-  btn.querySelector('.why').textContent = [reason(b, deadlineWord(subject)), sev].filter(Boolean).join(' ・ ');
+  const examName = exam?.title?.trim();
+  btn.querySelector('.why').textContent = [reason(b, deadlineWord(subject)), examName].filter(Boolean).join(' ・ ');
   const studied = subjectTodaySeconds(subject.id, false);
   btn.querySelector('.today').textContent = studied > 0 ? hhmm(studied) : '—';
   btn.addEventListener('click', () => {
@@ -124,9 +133,27 @@ function renderHome() {
   ranked.slice(0, 3).forEach((item) => renderSubjectButton(list, item));
 
   const p = levelProgress(state.xp);
-  $('levelValue').textContent = p.level;
-  $('xpValue').textContent = state.xp;
-  $('streakValue').textContent = `${streak(state.sessions)}日`;
+  $('levelValue').textContent = `Lv.${p.level}`;
+  $('levelDetail').textContent = `${p.into}/${p.span} XP`;
+  $('streakValue').textContent = String(streak(state.sessions));
+  const totalSeconds = state.sessions.reduce((sum, session) => sum + studySeconds(session), 0);
+  $('totalStudyValue').textContent = hhmm(totalSeconds);
+
+  const recent = ranked
+    .filter(({ subject }) => subject.lastUsedAt)
+    .sort((a, b) => b.subject.lastUsedAt - a.subject.lastUsedAt)
+    .slice(0, 3);
+  $('recentSection').classList.toggle('hidden', recent.length === 0);
+  $('recentList').innerHTML = '';
+  recent.forEach(({ subject }) => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'recent-chip';
+    button.innerHTML = '<span class="subject-dot"></span><span></span>';
+    button.querySelector('.subject-dot').style.background = `#${subject.colorHex}`;
+    button.lastElementChild.textContent = subject.name;
+    button.addEventListener('click', () => startSession(subject.id));
+    $('recentList').appendChild(button);
+  });
 }
 
 function selectedMode() {
@@ -174,6 +201,8 @@ function startSession(subjectId, mode = 'stopwatch', countdownMinutes = 25, plan
   state.settings.usePlannedEnd = !!plannedEndAt;
   if (plannedEndAt) state.settings.plannedEnd = clock(plannedEndAt);
   state.active = { id: uid(), subjectId, start: Date.now(), breaks: [], end: null, mode, countdownMinutes, plannedEndAt };
+  const subject = state.subjects.find((item) => item.id === subjectId);
+  if (subject) subject.lastUsedAt = Date.now();
   save();
   show('desk');
 }
@@ -259,6 +288,40 @@ function startBreak(minutes = null) {
   lastInteraction = Date.now(); save(); renderDesk();
 }
 
+async function showFocusNotification(title, body, tag) {
+  if (!state.settings.notificationsEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const registration = await navigator.serviceWorker?.ready;
+    if (registration) await registration.showNotification(title, { body, tag, icon: './app-icon.png', silent: true });
+    else new Notification(title, { body, tag, icon: './app-icon.png', silent: true });
+  } catch { /* 通知が失敗してもタイマーは止めない */ }
+}
+
+function notificationDescription() {
+  if (!('Notification' in window)) return 'このブラウザは通知に対応していません。';
+  if (Notification.permission === 'granted') return '通知は有効です。サイトを完全に閉じた後の通知にはPush配信が必要です。';
+  if (Notification.permission === 'denied') return '通知がブロックされています。端末の設定からFocus Deskを許可してください。';
+  return 'iPhoneでは「ホーム画面に追加」した後、このボタンから許可してください。';
+}
+
+async function enableNotifications() {
+  if (!('Notification' in window)) { $('notificationStatus').textContent = notificationDescription(); return; }
+  try {
+    const permission = await Notification.requestPermission();
+    state.settings.notificationsEnabled = permission === 'granted'; save();
+    renderNotificationSettings();
+    if (permission === 'granted') void showFocusNotification('Focus Desk', '通知を有効にしました。', 'focus-enabled');
+  } catch {
+    $('notificationStatus').textContent = 'Safariの共有メニューからホーム画面に追加して、もう一度お試しください。';
+  }
+}
+
+function renderNotificationSettings() {
+  $('notificationStatus').textContent = notificationDescription();
+  $('enableNotificationsBtn').textContent = window.Notification?.permission === 'granted' ? '通知は有効です' : '通知を有効にする';
+  $('enableNotificationsBtn').disabled = !('Notification' in window) || window.Notification.permission === 'granted';
+}
+
 function endBreak() {
   const last = state.active?.breaks.at(-1);
   if (!last || last.end) return;
@@ -322,6 +385,15 @@ function renderDesk() {
     $('plannedNotice').textContent = now >= s.plannedEndAt ? '終わり予定の時刻を過ぎています' : `終わり予定 ${clock(s.plannedEndAt)}`;
   } else $('plannedNotice').classList.add('hidden');
 
+  if (s.plannedEndAt && now >= s.plannedEndAt && !s.plannedEndNotifiedAt) {
+    s.plannedEndNotifiedAt = now; save();
+    void showFocusNotification('終わり予定の時刻です', `${subject?.name ?? '勉強'}を区切るか決めましょう。`, `planned-${s.id}`);
+  }
+  if (countdown !== null && countdown <= 0 && !s.countdownNotifiedAt) {
+    s.countdownNotifiedAt = now; save();
+    void showFocusNotification('カウントダウンが終わりました', subject?.name ?? 'Focus Desk', `countdown-${s.id}`);
+  }
+
   if (onBreak) {
     const left = breakRemaining(s, now);
     if (left === null) {
@@ -329,7 +401,11 @@ function renderDesk() {
       $('breakLeft').textContent = durationClock((now - currentBreak.start) / 1000);
       $('breakNudge').textContent = '時間を決めない休憩です。上のボタンで勉強に戻れます。';
     } else if (left >= 0) { $('breakLeft').textContent = shortCountdown(left); $('breakNudge').textContent = '時間になったら静かにお知らせします。'; }
-    else { const over = Math.floor(-left / 60); $('breakLeft').textContent = `+${over}分`; $('breakNudge').textContent = over >= 5 ? 'そろそろ勉強に戻りませんか。' : '休憩の予定を過ぎました。'; }
+    else {
+      const over = Math.floor(-left / 60); $('breakLeft').textContent = `+${over}分`; $('breakNudge').textContent = over >= 5 ? 'そろそろ勉強に戻りませんか。' : '休憩の予定を過ぎました。';
+      const currentBreak = s.breaks.at(-1);
+      if (!currentBreak.notifiedAt) { currentBreak.notifiedAt = now; save(); void showFocusNotification('休憩時間が終わりました', 'そろそろ勉強に戻りましょう。', `break-${s.id}-${currentBreak.start}`); }
+    }
   }
 
   const dimAfter = Number(state.settings.dimAfter || 0) * 1000;
@@ -374,14 +450,16 @@ function openSubjectDialog() {
 function clearSubjectForm() {
   $('subjectForm').reset(); $('sjId').value = ''; $('sjExisting').value = ''; newKind = 'study'; setKind('study');
   $('colorOptions').querySelector('input').checked = true;
+  $('examEditors').innerHTML = '';
 }
 
 function loadSubjectIntoForm(id) {
   const subject = state.subjects.find((item) => item.id === id);
   if (!subject) { clearSubjectForm(); return; }
   $('sjId').value = subject.id; $('sjName').value = subject.name; setKind(subject.kind);
-  $('sjGoal').value = String(subject.dailyGoalMinutes || 0); $('sjDate').value = subject.examDate || '';
-  $('sjSeverity').value = String(subject.severity || 2); $('sjManual').value = String(subject.manual || 0);
+  $('sjGoal').value = String(subject.dailyGoalMinutes || 0); $('sjManual').value = String(subject.manual || 0);
+  $('examEditors').innerHTML = '';
+  (subject.exams ?? []).sort((a, b) => a.date.localeCompare(b.date)).forEach(addExamEditor);
   const color = document.querySelector(`input[name="subjectColor"][value="${subject.colorHex}"]`);
   if (color) color.checked = true;
 }
@@ -390,6 +468,26 @@ function setKind(kind) {
   newKind = kind;
   $('kindTabs').querySelectorAll('[data-kind]').forEach((button) => button.setAttribute('aria-selected', String(button.dataset.kind === kind)));
   document.querySelectorAll('.deadlineWord').forEach((el) => { el.textContent = kind === 'task' ? '締め切り' : '試験'; });
+  document.querySelectorAll('.deadlineTitle').forEach((el) => { el.textContent = kind === 'task' ? '内容' : '試験'; });
+}
+
+function addExamEditor(exam = {}) {
+  const wrapper = document.createElement('div'); wrapper.className = 'exam-editor'; wrapper.dataset.examId = exam.id || uid();
+  wrapper.innerHTML = '<div class="exam-editor-head"><strong class="deadlineWord"></strong><button type="button" class="link-button">削除</button></div><div class="exam-fields"><label><span class="deadlineTitle"></span>名<input class="exam-title" placeholder="例：解剖学 本試験"></label><label>日付<input class="exam-date" type="date" required></label><label>重大度<select class="exam-severity"><option value="1">軽い</option><option value="2">普通</option><option value="3">重い</option><option value="4">落とせない</option></select></label></div>';
+  wrapper.querySelector('.deadlineWord').textContent = newKind === 'task' ? '締め切り' : '試験';
+  wrapper.querySelector('.deadlineTitle').textContent = newKind === 'task' ? '内容' : '試験';
+  wrapper.querySelector('.exam-title').value = exam.title || '';
+  wrapper.querySelector('.exam-date').value = exam.date || '';
+  wrapper.querySelector('.exam-severity').value = String(exam.severity || 2);
+  wrapper.querySelector('button').addEventListener('click', () => wrapper.remove());
+  $('examEditors').appendChild(wrapper);
+}
+
+function examsFromForm() {
+  return [...$('examEditors').querySelectorAll('.exam-editor')].map((editor) => ({
+    id: editor.dataset.examId, title: editor.querySelector('.exam-title').value.trim(),
+    date: editor.querySelector('.exam-date').value, severity: Number(editor.querySelector('.exam-severity').value),
+  })).filter((exam) => exam.date);
 }
 
 function saveSettingsFromForm() {
@@ -406,6 +504,7 @@ function openSettings() {
   const canSync = isSyncConfigured();
   $('syncNowBtn').disabled = !canSync;
   setSyncStatus(canSync ? '本人版：Notion同期を利用できます' : '公開体験版：この端末だけに保存します');
+  renderNotificationSettings();
   $('settingsDialog').showModal();
 }
 
@@ -423,10 +522,11 @@ document.querySelectorAll('[data-close]').forEach((button) => button.addEventLis
 $('sjCancel').addEventListener('click', () => $('subjectDialog').close());
 $('sjExisting').addEventListener('change', () => loadSubjectIntoForm($('sjExisting').value));
 $('kindTabs').querySelectorAll('[data-kind]').forEach((button) => button.addEventListener('click', () => setKind(button.dataset.kind)));
+$('addExamBtn').addEventListener('click', () => addExamEditor());
 $('subjectForm').addEventListener('submit', (event) => {
   event.preventDefault();
   const name = $('sjName').value.trim(); if (!name) return;
-  const values = { name, kind: newKind, colorHex: document.querySelector('input[name="subjectColor"]:checked')?.value ?? COLORS[0], dailyGoalMinutes: Number($('sjGoal').value), examDate: $('sjDate').value || null, severity: Number($('sjSeverity').value), manual: Number($('sjManual').value) };
+  const values = { name, kind: newKind, colorHex: document.querySelector('input[name="subjectColor"]:checked')?.value ?? COLORS[0], dailyGoalMinutes: Number($('sjGoal').value), exams: examsFromForm(), manual: Number($('sjManual').value) };
   const existing = state.subjects.find((subject) => subject.id === $('sjId').value);
   if (existing) Object.assign(existing, values); else state.subjects.push({ id: uid(), ...values });
   save(); $('subjectDialog').close(); renderHome();
@@ -445,6 +545,7 @@ $('doneBack').addEventListener('click', () => show('home'));
 $('goHistory').addEventListener('click', () => show('history'));
 $('backHome').addEventListener('click', () => show('home'));
 $('settingsBtn').addEventListener('click', openSettings);
+$('enableNotificationsBtn').addEventListener('click', enableNotifications);
 $('syncNowBtn').addEventListener('click', () => syncFocus());
 ['breakSuggestAfter', 'dimAfter', 'keepAwake'].forEach((id) => $(id).addEventListener('change', saveSettingsFromForm));
 $('resetBtn').addEventListener('click', () => {
@@ -456,5 +557,6 @@ $('resetBtn').addEventListener('click', () => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && state.active) { requestWakeLock(); renderDesk(); } });
 
 initColorOptions();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 show(state.active ? 'desk' : 'home');
 void syncFocus({ quiet: true });

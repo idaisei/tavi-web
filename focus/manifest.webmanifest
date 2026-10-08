@@ -1,6 +1,7 @@
 {
   "name": "Focus Desk",
   "short_name": "Focus Desk",
+  "id": "./",
   "description": "音を鳴らさない、机に置くための学習タイマー。",
   "start_url": "./",
   "scope": "./",
